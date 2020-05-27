@@ -6,6 +6,7 @@ import xmltodict
 import piexif
 from fractions import Fraction
 from datetime import datetime
+from sys import platform
 
 
 """
@@ -29,9 +30,22 @@ class VideoCapture(wx.Frame):
         self.media = mediapath
         self.Knopp = wx.Button(self.panel, label='Save Screenshot')
         self.Knopp.Bind(wx.EVT_BUTTON, self.screenshot)
+        
+        if platform == "linux" or platform == "linux2":
+            # linux
+            backend=wx.media.MEDIABACKEND_GSTREAMER            
+        elif platform == "darwin":
+            # OS X
+            backend=wx.media.MEDIABACKEND_QUICKTIME
+        elif platform == "win32":
+            # Windows...
+            backend=wx.media.MEDIABACKEND_WMP10
+            
+            
+        
         self.testMedia = wx.media.MediaCtrl(self.panel,
                                             style=wx.SIMPLE_BORDER,
-                                            szBackend=wx.media.MEDIABACKEND_WMP10)
+                                            szBackend=backend)
         wx.media.MediaCtrl.ShowPlayerControls(self.testMedia,
                                               flags=wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
