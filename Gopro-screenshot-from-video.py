@@ -4,17 +4,17 @@ import subprocess
 import gopro2gpx
 import xmltodict
 import piexif
+import os
 from fractions import Fraction
 from datetime import datetime
 from sys import platform
-
+from pathlib import Path
 
 """
 Created on Fri May 22 19:42:18 2020
 
 @author: Paddy
 """
-
 
 class VideoCapture(wx.Frame):
     """
@@ -27,9 +27,20 @@ class VideoCapture(wx.Frame):
         wx.Frame.__init__(self, parent=parent, size=(1000, 1000))
         self.picturenumber = 0
         self.panel = wx.Panel(self)
-        self.media = mediapath
+        self.index=0
+        self.mediapath=mediapath
+        try:
+            self.media = str(mediapath[self.index])
+        except Exception:
+            wx.MessageBox('Kein MP4 File gefunden ', 'Error')
+            self.quit(None)
+            
         self.Knopp = wx.Button(self.panel, label='Save Screenshot')
         self.Knopp.Bind(wx.EVT_BUTTON, self.screenshot)
+        self.prevButton = wx.Button(self.panel,label='Previous Video')
+        self.prevButton.Bind(wx.EVT_BUTTON, self.prevVideo)
+        self.nextButton = wx.Button(self.panel,label='Next Video')
+        self.nextButton.Bind(wx.EVT_BUTTON, self.nextVideo)
         
         if platform == "linux" or platform == "linux2":
             # linux
@@ -50,15 +61,27 @@ class VideoCapture(wx.Frame):
                                               flags=wx.media.MEDIACTRLPLAYERCONTROLS_DEFAULT)
 
         self.testMedia.Bind(wx.media.EVT_MEDIA_LOADED, self.play)
-        self.testMedia.Bind(wx.media.EVT_MEDIA_FINISHED, self.quit)
-
+        #self.testMedia.Bind(wx.media.EVT_MEDIA_FINISHED, self.quit)
+        
+        self.ButtonSizer=wx.BoxSizer(wx.HORIZONTAL)
+        
+        self.ButtonSizer.Add(self.prevButton, 0, wx.ALL, 5)
+        self.ButtonSizer.Add(self.Knopp, 0, wx.ALL, 5)
+        self.ButtonSizer.Add(self.nextButton, 0, wx.ALL, 5)
+        
         self.sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self.sizer.Add(self.Knopp, 0, wx.ALL, 5)
+        self.sizer.Add(self.ButtonSizer, 0, wx.ALL, 5)
         self.sizer.Add(self.testMedia, 0, wx.ALL, 5)
 
         self.panel.SetSizer(self.sizer)
 
+        self.load()
+
+        self.Show()
+        
+        
+    def load(self, event=None):
         try:
             self.rawgps = gopro2gpx.extract(self.media, skip=False)
             self.gpsdict = xmltodict.parse(self.rawgps)
@@ -73,8 +96,21 @@ class VideoCapture(wx.Frame):
         else:
             print("Media not found")
             self.quit(None)
+        
 
-        self.Show()
+    
+    def nextVideo(self, event=None):
+        if self.index < len(self.mediapath)-1:
+            self.index+=1
+            self.media=str(self.mediapath[self.index])
+            self.load()
+        
+    def prevVideo(self, event=None):
+        if self.index > 0:            
+            self.index-=1
+            self.media=str(self.mediapath[self.index])
+            self.load()
+        
 
     def play(self, event):
         self.testMedia.Play()
@@ -94,29 +130,42 @@ class VideoCapture(wx.Frame):
             onlyseconds = 1
 
         if self.gps:
+            
+            try:
 
-            lat = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["@lat"]
-            long = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["@lon"]
-            ele = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["ele"]
+                lat = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["@lat"]
+                long = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["@lon"]
+                ele = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["ele"]
+                #timeformat 2019-05-10T13:17:28Z
+                picturetime = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["time"]
+            except Exception:
+                lat = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"]["@lat"]
+                long = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"]["@lon"]
+                ele = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"]["ele"]
+                picturetime = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"]["time"]
+                
             if float(ele) < 0:
                 ele=0
             print("ele: " + str(ele))
-            #timeformat 2019-05-10T13:17:28Z
-            picturetime = self.gpsdict["gpx"]["trk"]["trkseg"]["trkpt"][onlyseconds-1]["time"]
+            
+            
             format_str = '%Y-%m-%dT%H:%M:%SZ'
             datetime_obj = datetime.strptime(picturetime, format_str)
             name ='image'+str(self.picturenumber) + '.jpg'
+            while os.path.exists(name):
+                self.picturenumber+=1
+                name ='image'+str(self.picturenumber) + '.jpg'
             command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 ' + name
             print(command)
             print('\n')
             print(subprocess.run(command))
             self.set_gps_location(name,float(lat),float(long),float(ele),datetime_obj)
         else:
-            name='image'+str(self.picturenumber) + 'no geodata' +'.jpg'
+            name='image'+str(self.picturenumber) + 'no_geodata' +'.jpg'
             command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 ' + name
             print(subprocess.run(command))
             
-            command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 image'+str(self.picturenumber)+'-'+lat+'-'+long+'.jpg'
+            #command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 image'+str(self.picturenumber)+'-'+lat+'-'+long+'.jpg'
 
         
         self.picturenumber+=1
@@ -232,9 +281,18 @@ class mainWindow(wx.Frame):
         """
         Opens Dialog to Browse for a file
         """
-        dialog = wx.FileDialog(None, "MP4 auswählen",wildcard="MP4 files (*.mp4)|*.mp4",style= wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
+        dialog = wx.DirDialog(None, "Ordner auswählen",style= wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
         if dialog.ShowModal() == wx.ID_OK:
-            VideoCapture(dialog.GetPath())
+            self.path=Path(dialog.GetPath())
+            self.files=os.listdir(self.path)
+            print("BEFORE")
+            print(self.files)
+            self.files= [self.path / i for i in self.files if i.endswith('mp4') or i.endswith('MP4')]
+            print("AFTER")
+            print(self.files)
+            print("-----------------------------------")
+            print(self.files)
+            VideoCapture(self.files)
         else:
             wx.MessageBox('Unbekannter Fehler beim Auswählen des Ordners. Ist der Ordner Verfügbar?', 'Èrror',)
         dialog.Destroy()
