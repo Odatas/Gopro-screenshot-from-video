@@ -23,12 +23,13 @@ class VideoCapture(wx.Frame):
     opens a media widget to play the video. Extracts gps from the video a
     and pares it to the screenshot that gets created
     """
-    def __init__(self, mediapath, parent=None):
+    def __init__(self, mediapath,saveFolder, parent=None):
         wx.Frame.__init__(self, parent=parent, size=(1000, 1000))
         self.picturenumber = 0
         self.panel = wx.Panel(self)
         self.index=0
         self.mediapath=mediapath
+        self.saveFolder=str(saveFolder)
         try:
             self.media = str(mediapath[self.index])
         except Exception:
@@ -146,23 +147,30 @@ class VideoCapture(wx.Frame):
                 
             if float(ele) < 0:
                 ele=0
-            print("ele: " + str(ele))
             
             
             format_str = '%Y-%m-%dT%H:%M:%SZ'
             datetime_obj = datetime.strptime(picturetime, format_str)
             name ='image'+str(self.picturenumber) + '.jpg'
+            name=self.saveFolder + "\\" + name
             while os.path.exists(name):
                 self.picturenumber+=1
                 name ='image'+str(self.picturenumber) + '.jpg'
-            command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 ' + name
+                name=self.saveFolder + "\\" + name
+                
+            command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 "'+name+'" '
             print(command)
             print('\n')
             print(subprocess.run(command))
             self.set_gps_location(name,float(lat),float(long),float(ele),datetime_obj)
         else:
             name='image'+str(self.picturenumber) + 'no_geodata' +'.jpg'
-            command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 ' + name
+            name=self.saveFolder + "\\" + name
+            while os.path.exists(name):
+                self.picturenumber+=1
+                name ='image'+str(self.picturenumber) + '.jpg'
+                name=self.saveFolder + "\\" + name
+            command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 "'+name+'" '
             print(subprocess.run(command))
             
             #command='ffmpeg -y -ss '+time+' -i "'+self.media+'" -frames:v 1 -q:v 2 image'+str(self.picturenumber)+'-'+lat+'-'+long+'.jpg'
@@ -253,19 +261,28 @@ class mainWindow(wx.Frame):
     Creates Bare Bone Video Selection Window
     """
     def __init__(self):
-        wx.Frame.__init__(self, None)
+        wx.Frame.__init__(self, None, size=(400, 400))
         self.panel = wx.Panel(self)
+        self.savePath=os.getcwd()
 
 
-        self.BrowseButton=wx.Button(self.panel,label="Mp4 Datei Auswählen")
+        self.BrowseButton=wx.Button(self.panel,label="Select folder with MP4s")
         self.BrowseButton.Bind(wx.EVT_BUTTON,self.onBrowse)
+        
+        self.SaveFolderText=wx.StaticText(self.panel,label="Savefolder: " + self.savePath)
+        
+        self.SaveButton=wx.Button(self.panel,label="Change picture save location")
+        self.SaveButton.Bind(wx.EVT_BUTTON,self.onBrowseSaveLocation)
 
         self.sizer=wx.BoxSizer(wx.VERTICAL)
 
-        self.sizer.Add(self.BrowseButton,0, wx.ALL,200)
+        self.sizer.Add(self.BrowseButton,0,  wx.ALIGN_CENTER_VERTICAL | wx.ALL,20)
+        self.sizer.Add(self.SaveFolderText,0,wx.EXPAND | wx.ALIGN_CENTER_VERTICAL |wx.ALL,20)
+        self.sizer.Add(self.SaveButton,0, wx.ALL,20)
 
 
         self.panel.SetSizer(self.sizer)
+        self.Centre()
         self.sizer.SetSizeHints(self)
 
 
@@ -274,7 +291,12 @@ class mainWindow(wx.Frame):
         self.Destroy()
 
 
-
+    def onBrowseSaveLocation(self,event=None):
+        dialog = wx.DirDialog(None, "Ordner auswählen",style= wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST)
+        if dialog.ShowModal() == wx.ID_OK:
+            self.savePath=Path(dialog.GetPath())
+            self.SaveFolderText.SetLabel("Savefolder: " + str(self.savePath))
+        
 
 
     def onBrowse(self, event):
@@ -285,14 +307,8 @@ class mainWindow(wx.Frame):
         if dialog.ShowModal() == wx.ID_OK:
             self.path=Path(dialog.GetPath())
             self.files=os.listdir(self.path)
-            print("BEFORE")
-            print(self.files)
             self.files= [self.path / i for i in self.files if i.endswith('mp4') or i.endswith('MP4')]
-            print("AFTER")
-            print(self.files)
-            print("-----------------------------------")
-            print(self.files)
-            VideoCapture(self.files)
+            VideoCapture(self.files,self.savePath)
         else:
             wx.MessageBox('Unbekannter Fehler beim Auswählen des Ordners. Ist der Ordner Verfügbar?', 'Èrror',)
         dialog.Destroy()
